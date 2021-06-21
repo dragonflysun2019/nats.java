@@ -491,8 +491,9 @@ public class ReconnectTests {
         int ts2CPort = NatsTestServer.nextPort();
 
         String[] tsInserts = {
-                "",
+                "client_advertise: localhost:" + tsPort,
                 "cluster {",
+                "name: reconnectNoIPTLSConnection",
                 "listen: localhost:" + tsCPort,
                 "routes = [",
                 "nats-route://localhost:" + ts2CPort,
@@ -500,7 +501,9 @@ public class ReconnectTests {
                 "}"
         };
         String[] ts2Inserts = {
+                "client_advertise: localhost:" + ts2Port,
                 "cluster {",
+                "name: reconnectNoIPTLSConnection",
                 "listen: localhost:" + ts2CPort,
                 "routes = [",
                 "nats-route://127.0.0.1:" + tsCPort,
@@ -586,7 +589,7 @@ public class ReconnectTests {
             for (int i = 0; i < 100; i++) {
                 // stop and start in a loop without waiting for the future to complete
                 nc.getWriter().stop();
-                nc.getWriter().start(nc.getDataPortFuture());
+                nc.getWriter().start(nc.getNatsChannelFuture());
             }
 
             nc.getWriter().stop();

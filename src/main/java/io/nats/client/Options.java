@@ -13,12 +13,16 @@
 
 package io.nats.client;
 
+import io.nats.client.impl.AdaptDataPortToNatsChannelFactory;
 import io.nats.client.impl.DataPort;
+import io.nats.client.channels.DefaultNatsChannelFactory;
+import io.nats.client.channels.NatsChannelFactory;
 import io.nats.client.impl.SocketDataPort;
 import io.nats.client.support.SSLUtils;
 
 import javax.net.ssl.SSLContext;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.CharBuffer;
@@ -158,11 +162,11 @@ public class Options {
     public static final int DEFAULT_MAX_CONTROL_LINE = 4096;
 
     /**
-     * Default dataport class, which will use a TCP socket, {@link #getDataPortType() getDataPortType()}.
+     * Default dataport class, which will use a TCP socket, {@link Builder#dataPortType(String) dataPortType()}.
      * 
-     * <p><em>This option is currently provided only for testing, and experimentation, the default 
-     * should be used in almost all cases.</em>
+     * <p><em>This option should NOT be used and will be phased out.</em>
      */
+    @Deprecated
     public static final String DEFAULT_DATA_PORT_TYPE = SocketDataPort.class.getCanonicalName();
 
     /**
@@ -225,8 +229,19 @@ public class Options {
     /**
      * Property used to configure a builder from a Properties object. {@value}, see
      * {@link Builder#dataPortType(String) dataPortType}.
+     * 
+     * Replaced with {@link Builder#natsChannelFactory(NatsChannelFactory) natsChannelFactory}.
      */
+    @Deprecated
     public static final String PROP_DATA_PORT_TYPE = PFX + "dataport.type";
+    /**
+     * Property used to configure a builder from a Properties object. {@value}, see
+     * {@link Builder#natsChannelFactory(NatsChannelFactory) natsChannelFactory}.
+     * 
+     * Defaults to "io.nats.client.impl.DefaultNatsChannelFactory" value. The resulting
+     * class MUST implement the NatsChannelFactory interface.
+     */
+    public static final String PROP_NATS_CHANNEL_FACTORY = PFX + "channel.factory";
     /**
      * Property used to configure a builder from a Properties object. {@value}, see
      * {@link Builder#errorListener(ErrorListener) errorListener}.
@@ -501,7 +516,7 @@ public class Options {
 
     private final ErrorListener errorListener;
     private final ConnectionListener connectionListener;
-    private final String dataPortType;
+    private final NatsChannelFactory natsChannelFactory;
 
     private final boolean trackAdvancedStats;
     private final boolean traceConnection;
@@ -577,7 +592,7 @@ public class Options {
 
         private ErrorListener errorListener = null;
         private ConnectionListener connectionListener = null;
-        private String dataPortType = DEFAULT_DATA_PORT_TYPE;
+        private NatsChannelFactory natsChannelFactory = DefaultNatsChannelFactory.INSTANCE;
         private ExecutorService executor;
 
         /**
@@ -756,7 +771,17 @@ public class Options {
             }
 
             if (props.containsKey(PROP_DATA_PORT_TYPE)) {
-                this.dataPortType = props.getProperty(PROP_DATA_PORT_TYPE);
+                String dataPortType = props.getProperty(PROP_DATA_PORT_TYPE);
+                this.natsChannelFactory = new AdaptDataPortToNatsChannelFactory(
+                    () -> {
+                        Object instance = createInstanceOf(dataPortType);
+                        return (DataPort) instance;
+                    });
+            }
+
+            if (props.containsKey(PROP_NATS_CHANNEL_FACTORY)) {
+                Object instance = createInstanceOf(props.getProperty(PROP_NATS_CHANNEL_FACTORY));
+                this.natsChannelFactory = (NatsChannelFactory) instance;
             }
 
             if (props.containsKey(PROP_INBOX_PREFIX)) {
@@ -774,14 +799,22 @@ public class Options {
             }
         }
 
+        private static <E extends Throwable> void sneakyThrow(Throwable e) throws E {
+            throw (E) e;
+        }
+
         static Object createInstanceOf(String className) {
             Object instance;
             try {
                 Class<?> clazz = Class.forName(className);
                 Constructor<?> constructor = clazz.getConstructor();
                 instance = constructor.newInstance();
+            } catch (InvocationTargetException e) {
+                sneakyThrow(e.getCause());
+                instance = null;
             } catch (Exception e) {
-                throw new IllegalArgumentException(e);
+                sneakyThrow(e);
+                instance = null;
             }
             return instance;
         }
@@ -1290,7 +1323,22 @@ public class Options {
          * @return the Builder for chaining
          */
         public Builder dataPortType(String dataPortClassName) {
-            this.dataPortType = dataPortClassName;
+            this.natsChannelFactory = new AdaptDataPortToNatsChannelFactory(
+                () -> {
+                    Object instance = createInstanceOf(dataPortClassName);
+                    return (DataPort) instance;
+                });
+            return this;
+        }
+
+        /**
+         * The class used for building the NatsChannel.
+         * 
+         * @param natsChannelFactory is the new NatsChannelFactory instance to use
+         * @return the Builder for chaining
+         */
+        public Builder natsChannelFactory(NatsChannelFactory natsChannelFactory) {
+            this.natsChannelFactory = natsChannelFactory;
             return this;
         }
 
@@ -1406,7 +1454,7 @@ public class Options {
 
         this.errorListener = b.errorListener;
         this.connectionListener = b.connectionListener;
-        this.dataPortType = b.dataPortType;
+        this.natsChannelFactory = b.natsChannelFactory;
         this.trackAdvancedStats = b.trackAdvancedStats;
         this.executor = b.executor;
     }
@@ -1447,17 +1495,12 @@ public class Options {
     }
 
     /**
-     * @return the dataport type for connections created by this options object, see {@link Builder#dataPortType(String) dataPortType()} in the builder doc
+     * Used to build a {@link io.nats.client.channels.NatsChannel} instance.
+     * 
+     * @return a NatsChannelFactory
      */
-    public String getDataPortType() {
-        return this.dataPortType;
-    }
-
-    /**
-     * @return the data port described by these options
-     */
-    public DataPort buildDataPort() {
-        return (DataPort) Options.Builder.createInstanceOf(dataPortType);
+    public NatsChannelFactory getNatsChannelFactory() {
+        return natsChannelFactory;
     }
 
     /**

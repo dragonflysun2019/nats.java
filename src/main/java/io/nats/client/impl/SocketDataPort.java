@@ -30,14 +30,16 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * This class is not theadsafe.  Caller must ensure thread safety.
+ * 
+ * This class has been replaced with {@link SocketNatsChannel}.
  */
+@Deprecated
 public class SocketDataPort implements DataPort {
 
     private NatsConnection connection;
     private String host;
     private int port;
     private Socket socket;
-    private SSLSocket sslSocket;
 
     private InputStream in;
     private OutputStream out;
@@ -71,32 +73,7 @@ public class SocketDataPort implements DataPort {
      * If the data port type doesn't support SSL it should throw an exception.
      */
     public void upgradeToSecure() throws IOException {
-        Options options = this.connection.getOptions();
-        SSLContext context = options.getSslContext();
-        
-        SSLSocketFactory factory = context.getSocketFactory();
-        Duration timeout = options.getConnectionTimeout();
-
-        this.sslSocket = (SSLSocket) factory.createSocket(socket, this.host, this.port, true);
-        this.sslSocket.setUseClientMode(true);
-
-        final CompletableFuture<Void> waitForHandshake = new CompletableFuture<>();
-        
-        this.sslSocket.addHandshakeCompletedListener((evt) -> {
-            waitForHandshake.complete(null);
-        });
-
-        this.sslSocket.startHandshake();
-
-        try {
-            waitForHandshake.get(timeout.toNanos(), TimeUnit.NANOSECONDS);
-        } catch (Exception ex) {
-            this.connection.handleCommunicationIssue(ex);
-            return;
-        }
-
-        in = sslSocket.getInputStream();
-        out = sslSocket.getOutputStream();
+        // Never called. Moved into TLSNatsChannel.
     }
 
     public int read(byte[] dst, int off, int len) throws IOException {
@@ -108,21 +85,14 @@ public class SocketDataPort implements DataPort {
     }
 
     public void shutdownInput() throws IOException {
-        // cannot call shutdownInput on sslSocket
-        if (sslSocket == null) {
-            socket.shutdownInput();
-        }
+        socket.shutdownInput();
     }
 
     public void close() throws IOException {
-        if (sslSocket != null) {
-            sslSocket.close(); // auto closes the underlying socket
-        } else {
-            socket.close();
-        }
+        socket.close();
     }
 
     public void flush() throws IOException {
-        out.flush();
+        // Never called.
     }
 }

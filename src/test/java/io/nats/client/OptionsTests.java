@@ -15,10 +15,16 @@ package io.nats.client;
 
 import io.nats.client.ConnectionListener.Events;
 import io.nats.client.impl.DataPort;
-import io.nats.client.utils.CloseOnUpgradeAttempt;
+import io.nats.client.channels.DefaultNatsChannelFactory;
+import io.nats.client.channels.NatsChannel;
+import io.nats.client.channels.NatsChannelFactory;
+import io.nats.client.impl.SocketDataPort;
+
 import org.junit.jupiter.api.Test;
 
 import javax.net.ssl.SSLContext;
+
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
@@ -30,6 +36,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -40,8 +47,6 @@ public class OptionsTests {
 
         assertEquals(1, o.getServers().size(), "default one server");
         assertEquals(Options.DEFAULT_URL, o.getServers().toArray()[0].toString(), "default url");
-
-        assertEquals(Options.DEFAULT_DATA_PORT_TYPE, o.getDataPortType(), "default data port type");
 
         assertFalse(o.isVerbose(), "default verbose");
         assertFalse(o.isPedantic(), "default pedantic");
@@ -407,24 +412,52 @@ public class OptionsTests {
     }
 
     @Test
-    public void testDefaultDataPort() {
+    public void testDefaultNatsChannelFactory() {
         Options o = new Options.Builder().build();
-        DataPort dataPort = o.buildDataPort();
+        NatsChannelFactory factory = o.getNatsChannelFactory();
 
-        assertNotNull(dataPort);
-        assertEquals(Options.DEFAULT_DATA_PORT_TYPE, dataPort.getClass().getCanonicalName(), "default dataPort");
+        assertNotNull(factory);
+        assertEquals(DefaultNatsChannelFactory.class, factory.getClass(), "default natsChannelFactory");
+    }
+
+    private static class CustomConnectException extends RuntimeException {
+    }
+
+    public static class TestPropertyNatsChannelFactory implements NatsChannelFactory {
+
+        @Override
+        public NatsChannel connect(URI serverURI, Options options, Duration timeout) throws IOException {
+            throw new CustomConnectException();
+        }
+
+    }
+
+    @Test
+    public void testPropertyNatsChannelFactory() {
+        Properties props = new Properties();
+        props.setProperty(Options.PROP_NATS_CHANNEL_FACTORY, TestPropertyNatsChannelFactory.class.getTypeName());
+
+        Options o = new Options.Builder(props).build();
+        assertFalse(o.isVerbose(), "default verbose"); // One from a different type
+
+        assertThrows(CustomConnectException.class, () -> o.getNatsChannelFactory().connect(null, null, null));
+    }
+
+    public static class TestPropertyDataPort extends SocketDataPort {
+        public TestPropertyDataPort() {
+            throw new CustomConnectException();
+        }
     }
 
     @Test
     public void testPropertyDataPortType() {
         Properties props = new Properties();
-        props.setProperty(Options.PROP_DATA_PORT_TYPE, CloseOnUpgradeAttempt.class.getCanonicalName());
+        props.setProperty(Options.PROP_DATA_PORT_TYPE, TestPropertyDataPort.class.getTypeName());
 
         Options o = new Options.Builder(props).build();
         assertFalse(o.isVerbose(), "default verbose"); // One from a different type
 
-        assertEquals(CloseOnUpgradeAttempt.class.getCanonicalName(), o.buildDataPort().getClass().getCanonicalName(),
-                "property data port class");
+        assertThrows(CustomConnectException.class, () -> o.getNatsChannelFactory().connect(null, null, null));
     }
 
     @Test
@@ -537,7 +570,7 @@ public class OptionsTests {
 
     @Test
     public void testBadClassInPropertyConnectionListeners() {
-        assertThrows(IllegalArgumentException.class, () -> {
+        assertThrows(ClassNotFoundException.class, () -> {
             Properties props = new Properties();
             props.setProperty(Options.PROP_CONNECTION_CB, "foo");
             new Options.Builder(props);
