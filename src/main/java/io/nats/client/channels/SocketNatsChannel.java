@@ -95,5 +95,10 @@ public class SocketNatsChannel implements NatsChannel {
     @Override
     public void shutdownInput() throws IOException {
         socket.shutdownInput();
-    }    
+    }
+
+    @Override
+    public String transformConnectUrl(String connectUrl) {
+        return connectUrl;
+    }
 }

@@ -109,4 +109,9 @@ public class TLSNatsChannel implements NatsChannel {
     public int write(ByteBuffer src) throws IOException {
         return byteChannel.write(src);
     }
+
+    @Override
+    public String transformConnectUrl(String connectUrl) {
+        return wrap.transformConnectUrl(connectUrl);
+    }
 }

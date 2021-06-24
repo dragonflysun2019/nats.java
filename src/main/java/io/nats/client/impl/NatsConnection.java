@@ -1334,7 +1334,7 @@ class NatsConnection implements Connection {
     }
 
     void handleInfo(String infoJson) {
-        ServerInfo serverInfo = new ServerInfo(infoJson);
+        ServerInfo serverInfo = new ServerInfo(infoJson, this.natsChannel::transformConnectUrl);
         this.serverInfo.set(serverInfo);
 
         List<String> urls = this.serverInfo.get().getConnectURLs();

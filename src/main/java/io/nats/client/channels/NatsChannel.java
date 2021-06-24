@@ -23,4 +23,16 @@ public interface NatsChannel extends ByteChannel {
      * @throws IOException if an IO error occurs.
      */
     void shutdownInput() throws IOException;
+
+    /**
+     * 
+     * When NATS handles the INFO message, it contains connect_urls which
+     * may not be fully qualified with a protocol, and thus when using
+     * these urls during reconnect attempts, the NatsChannelFactory may
+     * not create the correct implementation of NatsChannel.
+     * 
+     * @param connectUrl to transform
+     * @return the transformed connect_url
+     */
+    String transformConnectUrl(String connectUrl);
 }

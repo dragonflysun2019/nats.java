@@ -138,6 +138,11 @@ public class TLSByteChannelTests {
                     socket.shutdownInput();
                 }
 
+                @Override
+                public String transformConnectUrl(String connectUrl) {
+                    return connectUrl;
+                }
+
             };
 
             ByteBuffer info = ByteBuffer.allocate(1024 * 1024);

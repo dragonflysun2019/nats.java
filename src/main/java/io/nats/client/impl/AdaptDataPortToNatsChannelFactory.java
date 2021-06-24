@@ -107,5 +107,10 @@ public class AdaptDataPortToNatsChannelFactory implements NatsChannelFactory {
         public void shutdownInput() throws IOException {
             dataPort.shutdownInput();
         }
+
+        @Override
+        public String transformConnectUrl(String connectUrl) {
+            return connectUrl;
+        }
     }
 }

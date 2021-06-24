@@ -44,6 +44,11 @@ public class NatsChannelReference implements NatsChannel {
         ref.get().shutdownInput();
     }
 
+    @Override
+    public String transformConnectUrl(String connectUrl) {
+        return ref.get().transformConnectUrl(connectUrl);
+    }
+
     public void set(NatsChannel natsChannel) {
         this.ref.set(natsChannel);
     }

@@ -57,6 +57,11 @@ public class TLSNatsChannelTests {
         public void shutdownInput() throws IOException {
         }
 
+        @Override
+        public String transformConnectUrl(String connectUrl) {
+            return connectUrl;
+        }
+
     }
 
     @Test
