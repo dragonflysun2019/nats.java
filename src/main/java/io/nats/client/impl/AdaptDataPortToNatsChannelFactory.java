@@ -3,11 +3,19 @@ package io.nats.client.impl;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.security.GeneralSecurityException;
 import java.time.Duration;
 import java.util.function.Supplier;
+
+import javax.net.ssl.SSLContext;
+
 import io.nats.client.channels.NatsChannel;
 import io.nats.client.channels.NatsChannelFactory;
+import io.nats.client.support.SSLUtils;
 import io.nats.client.Options;
+
+import static io.nats.client.support.NatsConstants.TLS_PROTOCOL;
+import static io.nats.client.support.NatsConstants.OPENTLS_PROTOCOL;
 
 /**
  * Adapter for legacy implementations of DataPort.
@@ -112,5 +120,21 @@ public class AdaptDataPortToNatsChannelFactory implements NatsChannelFactory {
         public String transformConnectUrl(String connectUrl) {
             return connectUrl;
         }
+    }
+
+    @Override
+    public SSLContext createSSLContext(URI serverURI) throws GeneralSecurityException {
+        // Original data port implementation only supported these uris:
+        if (TLS_PROTOCOL.equals(serverURI.getScheme())) {
+            return SSLContext.getDefault();
+        }
+        else if (OPENTLS_PROTOCOL.equals(serverURI.getScheme())) {
+            // Previous code would return null if Exception is thrown... but if that
+            // happens then the exception will only be deferred until the SSLContext
+            // is required, therefore I believe it is better to NOT catch the
+            // exception.
+            return SSLUtils.createOpenTLSContext();
+        }
+        return null;
     }
 }

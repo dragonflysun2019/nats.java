@@ -28,6 +28,8 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.Collection;
@@ -36,7 +38,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -420,7 +421,38 @@ public class OptionsTests {
         assertEquals(DefaultNatsChannelFactory.class, factory.getClass(), "default natsChannelFactory");
     }
 
-    private static class CustomConnectException extends RuntimeException {
+    @Test
+    public void testWithTlsServerSetsSslContext() throws Exception {
+        SSLContext ctx = TestSSLUtils.createTestSSLContext();
+        SSLContext.setDefault(ctx);
+
+        Options o = new Options.Builder().server("tls://localhost").build();
+
+        assertEquals(ctx, o.getSslContext());
+    }
+
+    @Test
+    public void testWithOpenTlsServerSetsSslContext() throws Exception {
+        Options o = new Options.Builder().server("tls://localhost").build();
+
+        SSLContext ctx = TestSSLUtils.createTestSSLContext();
+        SSLContext.setDefault(ctx);
+
+        assertNotNull(o.getSslContext());
+        assertNotEquals(
+            ctx,
+            o.getSslContext());
+   }
+
+    private static class CustomConnectException extends RuntimeException {}
+
+    private static SSLContext CUSTOM_SSL_CONTEXT;
+    static {
+        try {
+            CUSTOM_SSL_CONTEXT = SSLContext.getInstance("TLSv1");
+        } catch (NoSuchAlgorithmException ex) {
+            throw new RuntimeException(ex);
+        }
     }
 
     public static class TestPropertyNatsChannelFactory implements NatsChannelFactory {
@@ -428,6 +460,11 @@ public class OptionsTests {
         @Override
         public NatsChannel connect(URI serverURI, Options options, Duration timeout) throws IOException {
             throw new CustomConnectException();
+        }
+
+        @Override
+        public SSLContext createSSLContext(URI serverURI) throws GeneralSecurityException {
+            return CUSTOM_SSL_CONTEXT;
         }
 
     }
@@ -441,6 +478,15 @@ public class OptionsTests {
         assertFalse(o.isVerbose(), "default verbose"); // One from a different type
 
         assertThrows(CustomConnectException.class, () -> o.getNatsChannelFactory().connect(null, null, null));
+    }
+
+    @Test
+    public void testNatsChannelFactoryWithCustomCreateSSLContext() {
+        Options o = new Options.Builder()
+            .natsChannelFactory(new TestPropertyNatsChannelFactory())
+            .build();
+
+        assertEquals(CUSTOM_SSL_CONTEXT, o.getSslContext());
     }
 
     public static class TestPropertyDataPort extends SocketDataPort {

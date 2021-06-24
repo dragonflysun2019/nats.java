@@ -26,6 +26,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.CharBuffer;
+import java.security.GeneralSecurityException;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.*;
@@ -998,10 +999,10 @@ public class Options {
         /**
          * Set the SSL context to one that accepts any server certificate and has no client certificates.
          * 
-         * @throws NoSuchAlgorithmException If the tls protocol is unavailable.
+         * @throws GeneralSecurityException If the tls protocol is unavailable.
          * @return the Builder for chaining
          */
-        public Builder opentls() throws NoSuchAlgorithmException {
+        public Builder opentls() throws GeneralSecurityException {
             this.sslContext = SSLUtils.createOpenTLSContext();
             return this;
         }
@@ -1390,18 +1391,17 @@ public class Options {
             if (servers.size() == 0) {
                 server(DEFAULT_URL);
             }
-            else if (sslContext == null) {
+            if (sslContext == null) {
                 for (URI serverURI : servers) {
-                    if (TLS_PROTOCOL.equals(serverURI.getScheme())) {
-                        try {
-                            this.sslContext = SSLContext.getDefault();
-                        } catch (NoSuchAlgorithmException e) {
-                            throw new IllegalStateException("Unable to create default SSL context", e);
-                        }
-                        break;
+                    try {
+                        this.sslContext = natsChannelFactory.createSSLContext(serverURI);
+                    } catch (Exception ex) {
+                        throw new IllegalStateException(
+                            "Specified server=" + serverURI +
+                            " which requires an SSLContext, but one could not be created: " + ex.getMessage(),
+                            ex);
                     }
-                    else if (OPENTLS_PROTOCOL.equals(serverURI.getScheme())) {
-                        this.sslContext = SSLUtils.createOpenTLSContext();
+                    if (null != this.sslContext) {
                         break;
                     }
                 }

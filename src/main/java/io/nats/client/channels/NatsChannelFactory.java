@@ -4,9 +4,11 @@ import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
 
+import javax.net.ssl.SSLContext;
+import java.security.GeneralSecurityException;
+
 import io.nats.client.Options;
 
-@FunctionalInterface
 public interface NatsChannelFactory {
     /**
      * Create a new NatsChannel for the given serverURI, options, and remaining timeout in nanoseconds.
@@ -23,4 +25,14 @@ public interface NatsChannelFactory {
      * @throws IOException if any IO error occurs.
      */
     public NatsChannel connect(URI serverURI, Options options, Duration timeout) throws IOException;
+
+    /**
+     * Determine if this serverURI would require an SSLContext and if so, then build
+     * an appropriate context.
+     * 
+     * @param serverURI is the URI to check if an SSLContext is required.
+     * 
+     * @throws GeneralSecurityException if a context can not be built.
+     */
+    public SSLContext createSSLContext(URI serverURI) throws GeneralSecurityException;
 }
